@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { PersistentBackground } from "@/components/persistent-background";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
@@ -7,20 +9,22 @@ export const metadata: Metadata = {
     default: "SCNZOS SecureLab | Practical cybersecurity tools",
     template: "%s | SCNZOS SecureLab",
   },
-  description: "Practical cybersecurity tools for everyday users.",
+  description: "Simple, private and open source security tools for everyday use.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body>
+        <PersistentBackground />
         <SiteHeader />
         <main>{children}</main>
-        <footer className="border-t border-slate-800/80 bg-slate-950/60">
-          <div className="shell flex flex-col gap-3 py-8 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-            <p>SCNZOS SecureLab</p>
-            <p>Practical cybersecurity tools for everyday users.</p>
+        <footer className="site-footer">
+          <div className="shell footer-inner">
+            <Link href="/" className="footer-brand"><strong>SCNZOS</strong><span>SecureLab</span></Link>
+            <nav aria-label="Footer navigation"><Link href="/#tools">Tools</Link><Link href="/about">About</Link><Link href="/privacy">Privacy</Link></nav>
           </div>
+          <p className="footer-copyright">© {new Date().getFullYear()} SCNZOS SecureLab</p>
         </footer>
       </body>
     </html>

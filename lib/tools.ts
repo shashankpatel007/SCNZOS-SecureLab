@@ -17,7 +17,7 @@ export const tools: Tool[] = [
   {
     slug: "file-privacy-inspector",
     name: "File Privacy Inspector",
-    description: "Understand what metadata a file may reveal before you share it.",
+    description: "Inspect privacy-sensitive metadata before sharing files.",
     detail: "A clear, client-side-first workspace for reviewing common document and media metadata.",
     icon: FileIcon,
     accent: "cyan",
@@ -26,7 +26,7 @@ export const tools: Tool[] = [
   {
     slug: "screenshot-privacy-cleaner",
     name: "Screenshot Privacy Cleaner",
-    description: "Prepare screenshots for sharing by spotting sensitive details.",
+    description: "Find and remove sensitive information from screenshots before sharing them.",
     detail: "A focused review surface for identifying private content in screenshots before export.",
     icon: ImageIcon,
     accent: "violet",
@@ -35,7 +35,7 @@ export const tools: Tool[] = [
   {
     slug: "url-redirect-visualizer",
     name: "URL Redirect Visualizer",
-    description: "Make a link’s redirect path easier to understand at a glance.",
+    description: "See where a URL redirects before opening it.",
     detail: "A readable visualization for checking each step in a URL’s redirect chain.",
     icon: RouteIcon,
     accent: "emerald",

@@ -1,8 +1,101 @@
 import Link from "next/link";
-import { ArrowUpRightIcon, ShieldIcon } from "@/components/icons";
 import type { Tool } from "@/lib/tools";
 
-export function ToolWorkspace({ tool }: { tool: Tool }) {
-  const Icon = tool.icon;
-  return <div className="shell py-12 sm:py-16"><Link href="/" className="text-sm text-slate-500 transition hover:text-cyan-300">← Back to all tools</Link><div className="mt-10 grid gap-10 lg:grid-cols-[1fr_1.05fr] lg:items-start"><section><div className="mb-6 flex size-14 items-center justify-center rounded-2xl border border-cyan-400/25 bg-cyan-400/10 text-cyan-300"><Icon className="size-7" /></div><p className="eyebrow text-cyan-300">Tool workspace</p><h1 className="mt-3 max-w-xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">{tool.name}</h1><p className="mt-5 max-w-xl text-lg leading-8 text-slate-400">{tool.detail}</p><div className="mt-7 flex items-center gap-2 text-sm text-slate-500"><ShieldIcon className="size-4 text-cyan-400" /> Processing functionality is not active yet.</div></section><section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 sm:p-8"><div className="flex items-start justify-between gap-4"><div><p className="eyebrow text-slate-500">Preview</p><h2 className="mt-2 text-xl font-semibold text-slate-100">Workspace coming soon</h2></div><span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-xs font-medium text-amber-300">In development</span></div><p className="mt-4 text-sm leading-6 text-slate-400">This page establishes the interface and planned workflow. No file, image, or URL analysis happens here yet.</p><div className="mt-7 space-y-3">{tool.plannedSteps.map((step, index) => <div key={step} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3.5"><span className="grid size-7 place-items-center rounded-full bg-slate-800 text-xs font-semibold text-cyan-300">{index + 1}</span><span className="text-sm text-slate-300">{step}</span></div>)}</div><button type="button" disabled className="mt-7 flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-500">Functionality not available yet <ArrowUpRightIcon className="size-4" /></button></section></div></div>;
+function UploadArea({ kind }: { kind: "file" | "image" }) {
+  const isImage = kind === "image";
+  const inputId = isImage ? "screenshot-upload" : "file-upload";
+  return (
+    <label className="upload-area" htmlFor={inputId}>
+      <svg aria-hidden="true" viewBox="0 0 32 32" className="upload-symbol" fill="none" stroke="currentColor" strokeWidth="1.25">
+        {isImage ? <><rect x="4" y="5" width="24" height="22" rx="2" /><circle cx="11" cy="12" r="2" /><path d="m6 24 7-7 5 5 3-3 5 5" /></> : <><path d="M9 3h9l8 8v18H9a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path d="M18 3v9h8" /></>}
+      </svg>
+      <span className="upload-title">Drop {isImage ? "an image" : "a file"} here</span>
+      <span className="upload-or">or</span>
+      <span className="button button-light">Choose {isImage ? "Image" : "File"}</span>
+      <input id={inputId} type="file" accept={isImage ? "image/*" : undefined} />
+    </label>
+  );
+}
+
+function FileWorkspace() {
+  return (
+    <div className="workspace-grid file-workspace">
+      <section className="workspace-main">
+        <UploadArea kind="file" />
+        <p className="workspace-caption">Analysis is not available yet. No metadata report is generated.</p>
+      </section>
+      <aside className="result-panel" aria-label="File details">
+        <h2>File details</h2>
+        <div className="empty-state"><span>Choose a file to begin.</span></div>
+        <div className="result-divider" />
+        <h3>Metadata</h3>
+        <p className="muted-copy">Available metadata will appear here when inspection is implemented.</p>
+      </aside>
+    </div>
+  );
+}
+
+function ScreenshotWorkspace() {
+  return (
+    <div className="workspace-grid screenshot-workspace">
+      <section className="workspace-main">
+        <UploadArea kind="image" />
+        <p className="workspace-caption">Image processing is not available yet.</p>
+      </section>
+      <section className="preview-panel">
+        <h2>Preview</h2>
+        <div className="preview-empty"><span className="preview-image-icon" aria-hidden="true">▧</span><span>No image selected</span></div>
+      </section>
+      <aside className="options-panel">
+        <h2>Detection options</h2>
+        {[
+          "Detect text (OCR)",
+          "Find sensitive information",
+          "Blur selected areas",
+          "Review before download",
+        ].map((option) => (
+          <label className="option-row" key={option}>
+            <input type="checkbox" disabled aria-label={`${option} (not available yet)`} />
+            <span>{option}</span>
+          </label>
+        ))}
+        <button className="button button-outline download-button" type="button" disabled>Download cleaned image</button>
+      </aside>
+    </div>
+  );
+}
+
+function UrlWorkspace() {
+  return (
+    <div className="url-workspace">
+      <form className="url-form">
+        <label className="visually-hidden" htmlFor="redirect-url">URL to trace</label>
+        <input id="redirect-url" type="url" placeholder="Enter a URL (e.g. https://example.com)" disabled />
+        <button className="button button-light" type="button" disabled>Trace URL</button>
+      </form>
+      <p className="workspace-caption">Redirect tracing is not available yet. No request will be made.</p>
+      <section className="redirect-panel">
+        <h2>Redirect chain</h2>
+        <div className="redirect-empty">
+          <svg aria-hidden="true" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="1.4"><circle cx="11" cy="7" r="3" /><circle cx="27" cy="27" r="3" /><path d="M11 10v11c0 4 4 6 8 6h5M14 12l10 8" /></svg>
+          <p>Enter a URL to see its redirect chain.</p>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function ToolWorkspace({ tool, interactiveContent }: { tool: Tool; interactiveContent?: React.ReactNode }) {
+  const index = tool.slug === "file-privacy-inspector" ? "01" : tool.slug === "screenshot-privacy-cleaner" ? "02" : "03";
+  return (
+    <div className="shell tool-page">
+      <Link href="/#tools" className="back-link"><span aria-hidden="true">←</span> Tools</Link>
+      <div className="tool-heading-row">
+        <h1>{tool.name}</h1>
+        <span className="tool-index">{index} / 03</span>
+      </div>
+      <p className="tool-intro">{tool.description}</p>
+      {interactiveContent ?? (tool.slug === "file-privacy-inspector" ? <FileWorkspace /> : tool.slug === "screenshot-privacy-cleaner" ? <ScreenshotWorkspace /> : <UrlWorkspace />)}
+    </div>
+  );
 }
