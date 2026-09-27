@@ -1,0 +1,11 @@
+import { ToolCard } from "@/components/tool-card";
+import { ShieldIcon } from "@/components/icons";
+import { tools } from "@/lib/tools";
+
+export default function HomePage() {
+  return <>
+    <section className="relative overflow-hidden border-b border-slate-800/70"><div className="grid-glow absolute inset-0" /><div className="shell relative py-20 sm:py-28"><div className="max-w-3xl"><div className="mb-7 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/8 px-3 py-1.5 text-xs font-medium text-cyan-300"><ShieldIcon className="size-3.5" /> Built for everyday digital safety</div><h1 className="max-w-3xl text-5xl font-semibold leading-[1.05] tracking-tight text-white sm:text-7xl">Security tools that make the <span className="text-cyan-300">everyday</span> safer.</h1><p className="mt-7 max-w-2xl text-lg leading-8 text-slate-400 sm:text-xl">Practical cybersecurity tools for everyday users. SCNZOS SecureLab helps you understand what you are sharing, where links lead, and what deserves a second look.</p><a href="#tools" className="mt-9 inline-flex items-center rounded-xl bg-cyan-300 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200">Explore the tools <span className="ml-2">↓</span></a></div></div></section>
+    <section id="tools" className="shell py-16 sm:py-20"><div className="mb-9 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="eyebrow text-cyan-300">The toolkit</p><h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">Start with a clearer picture.</h2></div><p className="max-w-sm text-sm leading-6 text-slate-500">Small, focused utilities for moments where a little more visibility goes a long way.</p></div><div className="grid gap-4 md:grid-cols-3">{tools.map((tool) => <ToolCard key={tool.slug} tool={tool} />)}</div></section>
+    <section id="about" className="border-t border-slate-800/70"><div className="shell grid gap-8 py-16 sm:grid-cols-[1fr_1.5fr] sm:py-20"><p className="eyebrow text-slate-500">Why SecureLab</p><p className="max-w-2xl text-xl leading-9 text-slate-300">A straightforward place to learn more about the files, images, and links you use every day. The project is designed around clarity, careful handling of sensitive inputs, and tools that explain themselves.</p></div></section>
+  </>;
+}
