@@ -16,6 +16,19 @@ export type RedirectObservation = {
   detail: string;
 };
 
+export type TraceErrorCode =
+  | "INVALID_URL"
+  | "UNSUPPORTED_PROTOCOL"
+  | "SSRF_BLOCKED"
+  | "DNS_FAILURE"
+  | "CONNECTION_FAILURE"
+  | "TLS_FAILURE"
+  | "TIMEOUT"
+  | "REDIRECT_LOOP"
+  | "TOO_MANY_REDIRECTS"
+  | "SERVER_REFUSED"
+  | "UNEXPECTED_ERROR";
+
 export type RedirectTraceResponse = {
   ok: boolean;
   hops: RedirectHop[];
@@ -28,4 +41,5 @@ export type RedirectTraceResponse = {
   };
   observations: RedirectObservation[];
   error?: string;
+  errorCode?: TraceErrorCode;
 };
