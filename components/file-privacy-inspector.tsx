@@ -53,8 +53,12 @@ export function FilePrivacyInspector() {
     setIsProcessing(true);
     try {
       setResult(await inspectFile(file));
-    } catch {
-      setError("The file could not be inspected. It may be corrupted, encrypted, or use metadata this browser cannot read.");
+    } catch (err) {
+      if (err instanceof Error && err.message) {
+        setError(err.message);
+      } else {
+        setError("The file could not be inspected. It may be corrupted, encrypted, or use metadata this browser cannot read.");
+      }
     } finally {
       setIsProcessing(false);
     }

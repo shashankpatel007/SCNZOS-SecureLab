@@ -81,12 +81,28 @@ function buildFindings(fields: MetadataField[]): PrivacyFinding[] {
   });
 }
 
+const MAX_IMAGE_DIMENSION = 8192;
+const MAX_IMAGE_PIXELS = 40_000_000;
+const MAX_DOCX_ENTRY_BYTES = 2 * 1024 * 1024; // 2 MB limit for metadata XML
+
 function imageDimensions(file: File) {
   return new Promise<{ width: number; height: number }>((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const image = new Image();
     image.onload = () => {
       URL.revokeObjectURL(objectUrl);
+      if (
+        !Number.isFinite(image.naturalWidth) ||
+        !Number.isFinite(image.naturalHeight) ||
+        image.naturalWidth <= 0 ||
+        image.naturalHeight <= 0 ||
+        image.naturalWidth > MAX_IMAGE_DIMENSION ||
+        image.naturalHeight > MAX_IMAGE_DIMENSION ||
+        image.naturalWidth * image.naturalHeight > MAX_IMAGE_PIXELS
+      ) {
+        reject(new Error("This image exceeds the maximum supported dimensions of 8192 × 8192 pixels or 40 megapixels."));
+        return;
+      }
       resolve({ width: image.naturalWidth, height: image.naturalHeight });
     };
     image.onerror = () => {
@@ -144,7 +160,15 @@ async function inspectDocx(file: File): Promise<InspectionResult> {
   if (!coreEntry && !appEntry) throw new Error("This DOCX file does not contain readable document properties.");
   const fields: MetadataField[] = [];
   if (coreEntry) {
-    const document = new DOMParser().parseFromString(await coreEntry.async("text"), "application/xml");
+    const uncompressedCore = (coreEntry as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize;
+    if (uncompressedCore !== undefined && uncompressedCore > MAX_DOCX_ENTRY_BYTES) {
+      throw new Error("The DOCX metadata entry exceeds the safe 2 MB limit.");
+    }
+    const text = await coreEntry.async("text");
+    if (text.length > MAX_DOCX_ENTRY_BYTES) {
+      throw new Error("The DOCX metadata entry exceeds the safe 2 MB limit.");
+    }
+    const document = new DOMParser().parseFromString(text, "application/xml");
     addField(fields, "Title", xmlValue(document, "title"));
     addField(fields, "Subject", xmlValue(document, "subject"));
     addField(fields, "Author", xmlValue(document, "creator"), "medium");
@@ -154,7 +178,15 @@ async function inspectDocx(file: File): Promise<InspectionResult> {
     addField(fields, "Revision", xmlValue(document, "revision"), "medium");
   }
   if (appEntry) {
-    const document = new DOMParser().parseFromString(await appEntry.async("text"), "application/xml");
+    const uncompressedApp = (appEntry as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize;
+    if (uncompressedApp !== undefined && uncompressedApp > MAX_DOCX_ENTRY_BYTES) {
+      throw new Error("The DOCX metadata entry exceeds the safe 2 MB limit.");
+    }
+    const text = await appEntry.async("text");
+    if (text.length > MAX_DOCX_ENTRY_BYTES) {
+      throw new Error("The DOCX metadata entry exceeds the safe 2 MB limit.");
+    }
+    const document = new DOMParser().parseFromString(text, "application/xml");
     addField(fields, "Application", xmlValue(document, "Application"), "medium");
     addField(fields, "App version", xmlValue(document, "AppVersion"));
   }
@@ -163,20 +195,44 @@ async function inspectDocx(file: File): Promise<InspectionResult> {
 
 async function inspectPdf(file: File): Promise<InspectionResult> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const loadingTask = pdfjs.getDocument({ data: await file.arrayBuffer(), disableWorker: true, useWorkerFetch: false, isEvalSupported: false } as Parameters<typeof pdfjs.getDocument>[0] & { disableWorker?: boolean });
-  const document = await loadingTask.promise;
-  const fields: MetadataField[] = [];
-  addField(fields, "Page count", document.numPages, "low");
-  const metadata = await document.getMetadata();
-  const info = metadata.info as Record<string, unknown> | undefined;
-  addField(fields, "Title", info?.Title);
-  addField(fields, "Author", info?.Author, "medium");
-  addField(fields, "Creator", info?.Creator, "medium");
-  addField(fields, "Producer", info?.Producer, "medium");
-  addField(fields, "Creation date", info?.CreationDate, "medium");
-  addField(fields, "Modification date", info?.ModDate, "medium");
-  addField(fields, "Subject", info?.Subject);
-  return makeResult(file, fields, fields.length === 1 ? "No document properties were found in this PDF." : undefined);
+  const loadingTask = pdfjs.getDocument({
+    data: await file.arrayBuffer(),
+    disableWorker: true,
+    useWorkerFetch: false,
+    isEvalSupported: false,
+  } as Parameters<typeof pdfjs.getDocument>[0] & { disableWorker?: boolean });
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      try { void loadingTask.destroy(); } catch {}
+      reject(new Error("PDF parsing timed out. The file may be complex or corrupted."));
+    }, 15000);
+  });
+
+  let document: Awaited<typeof loadingTask.promise> | null = null;
+  try {
+    document = await Promise.race([loadingTask.promise, timeoutPromise]);
+    if (timer) clearTimeout(timer);
+    const fields: MetadataField[] = [];
+    addField(fields, "Page count", document.numPages, "low");
+    const metadata = await document.getMetadata();
+    const info = metadata.info as Record<string, unknown> | undefined;
+    addField(fields, "Title", info?.Title);
+    addField(fields, "Author", info?.Author, "medium");
+    addField(fields, "Creator", info?.Creator, "medium");
+    addField(fields, "Producer", info?.Producer, "medium");
+    addField(fields, "Creation date", info?.CreationDate, "medium");
+    addField(fields, "Modification date", info?.ModDate, "medium");
+    addField(fields, "Subject", info?.Subject);
+    return makeResult(file, fields, fields.length === 1 ? "No document properties were found in this PDF." : undefined);
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (document) {
+      try { await document.cleanup(); } catch {}
+    }
+    try { await loadingTask.destroy(); } catch {}
+  }
 }
 
 export async function inspectFile(file: File): Promise<InspectionResult> {

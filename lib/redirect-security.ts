@@ -228,6 +228,9 @@ export function classifyNetworkError(error: unknown): TraceError {
   return new TraceError("UNEXPECTED_ERROR", "The URL could not be traced due to an unexpected error.");
 }
 
+export const ALLOWED_WEB_PORTS = new Set([80, 443, 8080, 8443]);
+export const MAX_URL_LENGTH = 2048;
+
 export function normalizeInput(rawInput: unknown): URL {
   if (typeof rawInput !== "string") {
     throw new TraceError("INVALID_URL", "Enter a valid URL.");
@@ -235,6 +238,9 @@ export function normalizeInput(rawInput: unknown): URL {
   const input = rawInput.trim();
   if (!input) {
     throw new TraceError("INVALID_URL", "Enter a URL to trace.");
+  }
+  if (input.length > MAX_URL_LENGTH) {
+    throw new TraceError("INVALID_URL", "The URL exceeds the maximum length of 2,048 characters.");
   }
 
   const withProtocol = /^[a-z][a-z\d+.-]*:/i.test(input) ? input : `https://${input}`;
@@ -251,6 +257,13 @@ export function normalizeInput(rawInput: unknown): URL {
 
   if (parsed.username || parsed.password) {
     throw new TraceError("INVALID_URL", "URLs containing usernames or passwords are not accepted.");
+  }
+
+  if (parsed.port) {
+    const portNum = Number(parsed.port);
+    if (!ALLOWED_WEB_PORTS.has(portNum)) {
+      throw new TraceError("INVALID_URL", "Only standard web ports (80, 443, 8080, 8443) can be traced.");
+    }
   }
 
   if (!parsed.hostname || parsed.hostname === "." || parsed.hostname.startsWith("-")) {

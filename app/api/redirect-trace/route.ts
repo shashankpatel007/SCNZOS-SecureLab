@@ -235,10 +235,67 @@ function observationsFor(hops: RedirectHop[]): RedirectObservation[] {
   return observations;
 }
 
+// Rate limiting and concurrency controls
+// NOTE: In-memory rate limiting provides best-effort protection against automated abuse on single instances.
+// It is not a substitute for distributed rate limiting (e.g. edge firewalls, reverse proxy rate limits) on multi-instance deployments.
+// Client IP detection uses standard reverse-proxy headers; trust depends on upstream proxy configuration.
+const MAX_CONCURRENT_TRACES = 10;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const MAX_REQUESTS_PER_WINDOW = 30;
+const MAX_BODY_BYTES = 4096;
+
+let activeTraces = 0;
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(clientIp: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(clientIp);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(clientIp, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+
+  if (entry.count >= MAX_REQUESTS_PER_WINDOW) {
+    return false;
+  }
+
+  entry.count += 1;
+  return true;
+}
+
 export async function POST(request: Request) {
-  let body: { url?: unknown };
+  // 1. Enforce payload size limit before full parsing
+  const contentLengthHeader = request.headers.get("content-length");
+  if (contentLengthHeader && Number(contentLengthHeader) > MAX_BODY_BYTES) {
+    return Response.json(
+      {
+        ok: false,
+        hops: [],
+        observations: [],
+        error: "Request payload too large (maximum 4 KB).",
+        errorCode: "INVALID_URL",
+      } satisfies RedirectTraceResponse,
+      { status: 400 }
+    );
+  }
+
+  let rawBody: string;
   try {
-    body = (await request.json()) as { url?: unknown };
+    const text = await request.text();
+    if (text.length > MAX_BODY_BYTES) {
+      return Response.json(
+        {
+          ok: false,
+          hops: [],
+          observations: [],
+          error: "Request payload too large (maximum 4 KB).",
+          errorCode: "INVALID_URL",
+        } satisfies RedirectTraceResponse,
+        { status: 400 }
+      );
+    }
+    rawBody = text;
   } catch {
     return Response.json(
       {
@@ -252,9 +309,81 @@ export async function POST(request: Request) {
     );
   }
 
+  let body: { url?: unknown };
+  try {
+    body = JSON.parse(rawBody) as { url?: unknown };
+  } catch {
+    return Response.json(
+      {
+        ok: false,
+        hops: [],
+        observations: [],
+        error: "Send a valid URL to trace.",
+        errorCode: "INVALID_URL",
+      } satisfies RedirectTraceResponse,
+      { status: 400 }
+    );
+  }
+
+  if (typeof body.url !== "string" || !body.url.trim()) {
+    return Response.json(
+      {
+        ok: false,
+        hops: [],
+        observations: [],
+        error: "Enter a URL to trace.",
+        errorCode: "INVALID_URL",
+      } satisfies RedirectTraceResponse,
+      { status: 400 }
+    );
+  }
+
+  // 2. Client IP rate limiting
+  const clientIp =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "direct-client";
+
+  if (!checkRateLimit(clientIp)) {
+    return Response.json(
+      {
+        ok: false,
+        hops: [],
+        observations: [],
+        error: "Rate limit exceeded. Please wait a minute before tracing more URLs.",
+        errorCode: "SERVER_REFUSED",
+      } satisfies RedirectTraceResponse,
+      { status: 429 }
+    );
+  }
+
+  // 3. Concurrency limit to prevent socket pool exhaustion
+  if (activeTraces >= MAX_CONCURRENT_TRACES) {
+    return Response.json(
+      {
+        ok: false,
+        hops: [],
+        observations: [],
+        error: "The server is currently busy with other trace requests. Please try again shortly.",
+        errorCode: "SERVER_REFUSED",
+      } satisfies RedirectTraceResponse,
+      { status: 429 }
+    );
+  }
+
+  activeTraces += 1;
+  try {
+    return await executeTrace(body.url);
+  } finally {
+    activeTraces = Math.max(0, activeTraces - 1);
+  }
+}
+
+async function executeTrace(rawUrl: string): Promise<Response> {
+
   let current: URL;
   try {
-    current = normalizeInput(body.url);
+    current = normalizeInput(rawUrl);
   } catch (error) {
     const classified = classifyNetworkError(error);
     return Response.json(

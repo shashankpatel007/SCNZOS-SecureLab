@@ -104,25 +104,38 @@ function loadImage(file: File) {
   });
 }
 
+const MAX_IMAGE_DIMENSION = 8192;
+const MAX_IMAGE_PIXELS = 40_000_000;
+
 function drawRedaction(context: CanvasRenderingContext2D, image: HTMLImageElement, finding: Finding, mode: RedactionMode) {
   const { x, y, width, height } = finding.box;
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) return;
+  if (width <= 0 || height <= 0) return;
+
+  // Add padding around OCR bounding boxes to cover complete ascenders, descenders, and adjacent punctuation
+  const padding = Math.max(5, Math.round(Math.min(width, height) * 0.12));
+  const left = Math.max(0, Math.round(x - padding));
+  const top = Math.max(0, Math.round(y - padding));
+  const right = Math.min(image.naturalWidth, Math.round(x + width + padding));
+  const bottom = Math.min(image.naturalHeight, Math.round(y + height + padding));
+
+  const targetWidth = right - left;
+  const targetHeight = bottom - top;
+  if (targetWidth <= 0 || targetHeight <= 0) return;
+
   if (mode === "solid") {
     context.fillStyle = "#111214";
-    context.fillRect(x, y, width, height);
+    context.fillRect(left, top, targetWidth, targetHeight);
     return;
   }
-  const padding = Math.max(5, Math.round(Math.min(width, height) * .12));
-  const left = Math.max(0, x - padding);
-  const top = Math.max(0, y - padding);
-  const right = Math.min(image.naturalWidth, x + width + padding);
-  const bottom = Math.min(image.naturalHeight, y + height + padding);
+
   const blurCanvas = document.createElement("canvas");
-  blurCanvas.width = right - left;
-  blurCanvas.height = bottom - top;
+  blurCanvas.width = targetWidth;
+  blurCanvas.height = targetHeight;
   const blurContext = blurCanvas.getContext("2d");
   if (!blurContext) return;
-  blurContext.filter = `blur(${Math.max(5, Math.round(Math.min(width, height) * .18))}px)`;
-  blurContext.drawImage(image, left, top, right - left, bottom - top, 0, 0, right - left, bottom - top);
+  blurContext.filter = `blur(${Math.max(5, Math.round(Math.min(targetWidth, targetHeight) * 0.18))}px)`;
+  blurContext.drawImage(image, left, top, targetWidth, targetHeight, 0, 0, targetWidth, targetHeight);
   context.drawImage(blurCanvas, left, top);
 }
 
@@ -141,7 +154,7 @@ export function ScreenshotPrivacyCleaner() {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
-  const [mode, setMode] = useState<RedactionMode>("blur");
+  const [mode, setMode] = useState<RedactionMode>("solid");
   const [status, setStatus] = useState("No image selected");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +177,23 @@ export function ScreenshotPrivacyCleaner() {
     try {
       setStatus("Preparing image...");
       const image = await loadImage(nextFile);
+
+      // Validate image dimensions to prevent canvas decompression bombs and browser memory exhaustion
+      if (
+        !Number.isFinite(image.naturalWidth) ||
+        !Number.isFinite(image.naturalHeight) ||
+        image.naturalWidth <= 0 ||
+        image.naturalHeight <= 0 ||
+        image.naturalWidth > MAX_IMAGE_DIMENSION ||
+        image.naturalHeight > MAX_IMAGE_DIMENSION ||
+        image.naturalWidth * image.naturalHeight > MAX_IMAGE_PIXELS
+      ) {
+        setError("Image dimensions are too large to process safely in the browser (maximum 8192 × 8192 pixels or 40 megapixels).");
+        setStatus("Processing failed");
+        imageRef.current = null;
+        return;
+      }
+
       imageRef.current = image;
       if (canvasRef.current) drawPreview(canvasRef.current, image, [], mode);
       setStatus("Reading screenshot...");
@@ -194,9 +224,20 @@ export function ScreenshotPrivacyCleaner() {
       setProgress(100);
       setStatus(detected.length ? `${detected.length} potential privacy finding${detected.length === 1 ? "" : "s"} found` : "No potentially sensitive information was detected.");
     } catch (caughtError) {
-      const message = caughtError instanceof Error && caughtError.message === "OCR_EMPTY"
-        ? "Text recognition could not read this image. Try a clearer or higher-resolution screenshot."
-        : "This image could not be processed. It may be corrupted or unsupported by the browser.";
+      let message = "This image could not be processed. It may be corrupted or unsupported by the browser.";
+      if (caughtError instanceof Error) {
+        if (caughtError.message === "OCR_EMPTY") {
+          message = "Text recognition could not read this image. Try a clearer or higher-resolution screenshot.";
+        } else if (
+          caughtError.message.includes("NetworkError") ||
+          caughtError.message.includes("fetch") ||
+          caughtError.message.includes("failed to fetch") ||
+          caughtError.message.includes("worker") ||
+          caughtError.message.includes("traineddata")
+        ) {
+          message = "OCR assets could not be loaded. Please check your internet connection and try again.";
+        }
+      }
       setError(message);
       setStatus("Processing failed");
       imageRef.current = null;
@@ -252,8 +293,8 @@ export function ScreenshotPrivacyCleaner() {
       </section>
       <aside className="screenshot-options-panel">
         <h2>Redaction</h2>
-        <div className="redaction-choice"><label><input type="radio" name="redaction-mode" checked={mode === "blur"} onChange={() => setMode("blur")} /> Blur selected areas</label><label><input type="radio" name="redaction-mode" checked={mode === "solid"} onChange={() => setMode("solid")} /> Solid redaction</label></div>
-        <p className="muted-copy">Redactions are drawn into a separate canvas. The original image remains unchanged.</p>
+        <div className="redaction-choice"><label><input type="radio" name="redaction-mode" checked={mode === "solid"} onChange={() => setMode("solid")} /> Solid redaction</label><label><input type="radio" name="redaction-mode" checked={mode === "blur"} onChange={() => setMode("blur")} /> Blur selected areas</label></div>
+        {mode === "blur" ? <p className="muted-copy">Notice: Blur may not permanently hide sensitive information and can be reversed by deblurring tools. Solid redaction is recommended for passwords, tokens, cards, and secrets.</p> : <p className="muted-copy">Solid redaction permanently replaces selected pixels with an opaque block. The original image remains unchanged.</p>}
         <button className="button button-light download-button" type="button" disabled={!selectedCount || !file} onClick={download}>Download Clean Image</button>
       </aside>
     </div>
