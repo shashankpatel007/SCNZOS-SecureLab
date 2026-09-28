@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Analytics } from "@vercel/analytics/next";
 import { PersistentBackground } from "@/components/persistent-background";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           </div>
           <p className="footer-copyright">© {new Date().getFullYear()} SCNZOS SecureLab</p>
         </footer>
+        <Analytics />
       </body>
     </html>
   );
